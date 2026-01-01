@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Pomodoro</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #333;
+      border-radius: 12px;
+      margin: 0;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+      width: 100%;
+      max-width: 280px;
+    }
+
+    .mode-indicator {
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .mode-indicator.focus {
+      color: #4a90e2;
+    }
+
+    .mode-indicator.break {
+      color: #50c878;
+    }
+
+    .timer-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timer-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .timer-ring-circle {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+    }
+
+    .timer-ring-background {
+      stroke: #e0e0e0;
+    }
+
+    .timer-ring-progress {
+      stroke: #4a90e2;
+      stroke-dasharray: 565.48;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.3s ease;
+    }
+
+    .timer-ring-progress.break {
+      stroke: #50c878;
+    }
+
+    .time-display {
+      position: relative;
+      z-index: 1;
+      font-size: 48px;
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px;
+      color: #333;
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 12px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+      color: #666;
+    }
+
+    .btn:hover {
+      background-color: #f0f0f0;
+    }
+
+    .btn:active {
+      background-color: #e0e0e0;
+    }
+
+    .btn-primary {
+      width: 64px;
+      height: 64px;
+      background-color: #4a90e2;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #357abd;
+    }
+
+    .btn-primary:active {
+      background-color: #2a5f94;
+    }
+
+    .btn-secondary {
+      width: 48px;
+      height: 48px;
+    }
+
+    .btn-icon {
+      width: 24px;
+      height: 24px;
+    }
+
+    .btn-primary .btn-icon {
+      width: 32px;
+      height: 32px;
+    }
+
+    /* SVG icons */
+    .icon-play {
+      fill: currentColor;
+    }
+
+    .icon-pause {
+      fill: currentColor;
+    }
+
+    .icon-reset {
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .icon-settings {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .settings-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 32px;
+      height: 32px;
+    }
+
+    .settings-panel {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 12px;
+      padding: 30px 20px;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 10;
+    }
+
+    .settings-panel.visible {
+      display: flex;
+    }
+
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .settings-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .settings-close {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+    }
+
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .settings-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .settings-input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .settings-input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #333;
+      background: white;
+    }
+
+    .settings-input:focus {
+      outline: none;
+      border-color: #4a90e2;
+    }
+
+    .settings-unit {
+      font-size: 14px;
+      color: #666;
+      min-width: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button class="btn settings-btn" id="settingsBtn" aria-label="Settings">
+      <svg class="btn-icon icon-settings" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+      </svg>
+    </button>
+
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-header">
+        <div class="settings-title">Settings</div>
+        <button class="btn settings-close" id="settingsCloseBtn" aria-label="Close Settings">
+          <svg class="btn-icon icon-reset" viewBox="0 0 24 24" style="transform: rotate(45deg);">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </button>
+      </div>
+      <div class="settings-group">
+        <label class="settings-label" for="focusDuration">Focus Duration</label>
+        <div class="settings-input-group">
+          <input type="number" id="focusDuration" class="settings-input" min="1" max="120" value="25">
+          <span class="settings-unit">minutes</span>
+        </div>
+      </div>
+      <div class="settings-group">
+        <label class="settings-label" for="breakDuration">Break Duration</label>
+        <div class="settings-input-group">
+          <input type="number" id="breakDuration" class="settings-input" min="1" max="60" value="5">
+          <span class="settings-unit">minutes</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mode-indicator focus">Focus</div>
+    
+    <div class="timer-container">
+      <svg class="timer-ring" viewBox="0 0 200 200">
+        <circle class="timer-ring-circle timer-ring-background" cx="100" cy="100" r="90"></circle>
+        <circle class="timer-ring-circle timer-ring-progress" cx="100" cy="100" r="90"></circle>
+      </svg>
+      <div class="time-display">25:00</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="playPauseBtn" aria-label="Play/Pause">
+        <svg class="btn-icon icon-play" id="playIcon" viewBox="0 0 24 24" style="display: block;">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg class="btn-icon icon-pause" id="pauseIcon" viewBox="0 0 24 24" style="display: none;">
+          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+        </svg>
+      </button>
+      <button class="btn btn-secondary" id="resetBtn" aria-label="Reset">
+        <svg class="btn-icon icon-reset" viewBox="0 0 24 24">
+          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
