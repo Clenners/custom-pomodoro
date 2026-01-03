@@ -52,6 +52,14 @@
       color: #50c878;
     }
 
+    .daily-tracking {
+      font-size: 12px;
+      font-weight: 400;
+      color: #999;
+      text-align: center;
+      margin-top: -8px;
+    }
+
     .timer-container {
       position: relative;
       width: 200px;
@@ -82,7 +90,7 @@
       stroke: #4a90e2;
       stroke-dasharray: 565.48;
       stroke-dashoffset: 0;
-      transition: stroke-dashoffset 0.3s ease;
+      transition: stroke-dashoffset 0.5s ease;
     }
 
     .timer-ring-progress.break {
@@ -200,8 +208,9 @@
       border-radius: 12px;
       padding: 30px 20px;
       flex-direction: column;
-      gap: 20px;
+      gap: 0;
       z-index: 10;
+      overflow: hidden;
     }
 
     .settings-panel.visible {
@@ -212,7 +221,49 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 20px;
+    }
+
+    .settings-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .settings-tab {
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+      margin-bottom: -1px;
+    }
+
+    .settings-tab:hover {
+      color: #333;
+      background: #f5f5f5;
+    }
+
+    .settings-tab.active {
+      color: #4a90e2;
+      border-bottom-color: #4a90e2;
+    }
+
+    .settings-tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .settings-tab-content.active {
+      display: flex;
     }
 
     .settings-title {
@@ -268,11 +319,6 @@
       min-width: 40px;
     }
 
-    .break-tasks-section {
-      margin-top: 10px;
-      padding-top: 20px;
-      border-top: 1px solid #e0e0e0;
-    }
 
     .break-tasks-list {
       display: flex;
@@ -654,31 +700,47 @@
           </svg>
         </button>
       </div>
-      <div class="settings-group">
-        <label class="settings-label" for="focusDuration">Focus Duration</label>
-        <div class="settings-input-group">
-          <input type="number" id="focusDuration" class="settings-input" min="1" max="120" value="25">
-          <span class="settings-unit">minutes</span>
+      <div class="settings-tabs">
+        <button class="settings-tab active" id="durationsTab" data-tab="durations">Durations</button>
+        <button class="settings-tab" id="breakTasksTab" data-tab="breakTasks">Break Tasks</button>
+      </div>
+      <div class="settings-tab-content active" id="durationsTabContent">
+        <div class="settings-group">
+          <label class="settings-label" for="focusDuration">Focus Duration</label>
+          <div class="settings-input-group">
+            <input type="number" id="focusDuration" class="settings-input" min="1" max="120" value="25">
+            <span class="settings-unit">minutes</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" for="breakDuration">Break Duration</label>
+          <div class="settings-input-group">
+            <input type="number" id="breakDuration" class="settings-input" min="1" max="60" value="5">
+            <span class="settings-unit">minutes</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" for="dailyTarget">Daily Target</label>
+          <div class="settings-input-group">
+            <input type="number" id="dailyTarget" class="settings-input" min="1" max="50" value="4">
+            <span class="settings-unit">pomodoros</span>
+          </div>
         </div>
       </div>
-      <div class="settings-group">
-        <label class="settings-label" for="breakDuration">Break Duration</label>
-        <div class="settings-input-group">
-          <input type="number" id="breakDuration" class="settings-input" min="1" max="60" value="5">
-          <span class="settings-unit">minutes</span>
+      <div class="settings-tab-content" id="breakTasksTabContent">
+        <div class="settings-group">
+          <label class="settings-label">Break Tasks</label>
+          <div class="add-task-input-group">
+            <input type="text" id="newTaskInput" class="add-task-input" placeholder="Add a break task...">
+            <button class="add-task-btn" id="addTaskBtn">Add</button>
+          </div>
         </div>
-      </div>
-      <div class="break-tasks-section">
-        <label class="settings-label">Break Tasks</label>
         <div class="break-tasks-list" id="breakTasksList"></div>
-        <div class="add-task-input-group">
-          <input type="text" id="newTaskInput" class="add-task-input" placeholder="Add a break task...">
-          <button class="add-task-btn" id="addTaskBtn">Add</button>
-        </div>
       </div>
     </div>
 
     <div class="mode-indicator focus">Focus</div>
+    <div class="daily-tracking" id="dailyTrackingDisplay">Today 0 / 0</div>
     
     <div class="timer-container">
       <svg class="timer-ring" viewBox="0 0 200 200">

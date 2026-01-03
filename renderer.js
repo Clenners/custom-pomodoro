@@ -24,6 +24,8 @@ const STORAGE_KEY_BREAK_DURATION = 'pomodoro_break_duration';
 const STORAGE_KEY_BREAK_TASKS = 'pomodoro_break_tasks';
 const STORAGE_KEY_SELECTED_TASKS = 'pomodoro_selected_tasks';
 const STORAGE_KEY_SELECTION_DATE = 'pomodoro_selection_date';
+const STORAGE_KEY_DAILY_TRACKING = 'pomodoro_daily_tracking';
+const STORAGE_KEY_DAILY_TARGET = 'pomodoro_daily_target';
 
 // Load durations from localStorage or use defaults
 function loadDurations() {
@@ -44,6 +46,29 @@ function saveDurations(focusMinutes, breakMinutes) {
 
 // Get current durations
 let durations = loadDurations();
+
+// Daily target (default: 4 pomodoros)
+const DEFAULT_DAILY_TARGET = 4;
+
+// Load daily target from localStorage or use default
+function loadDailyTarget() {
+  const stored = localStorage.getItem(STORAGE_KEY_DAILY_TARGET);
+  if (stored) {
+    const target = parseInt(stored, 10);
+    if (!isNaN(target) && target > 0) {
+      return target;
+    }
+  }
+  return DEFAULT_DAILY_TARGET;
+}
+
+// Save daily target to localStorage
+function saveDailyTarget(target) {
+  localStorage.setItem(STORAGE_KEY_DAILY_TARGET, target.toString());
+}
+
+// Daily target
+let dailyTarget = loadDailyTarget();
 
 // Timer state
 let timerState = {
@@ -69,6 +94,8 @@ let breakTasksList, newTaskInput, addTaskBtn;
 let breakTasksChecklist, breakTasksChecklistItems;
 let taskSelectionScreen, taskSelectionList, taskNameDisplay;
 let completionConfirmation, completionConfirmationText, completionYesBtn, completionNoBtn;
+let dailyTrackingDisplay, dailyTargetInput;
+let durationsTab, breakTasksTab, durationsTabContent, breakTasksTabContent;
 
 // Load break tasks from localStorage
 function loadBreakTasks() {
@@ -133,6 +160,95 @@ function checkAndResetSelection() {
     selectedTaskIndices = [];
     saveSelectedTasks();
   }
+}
+
+// Daily tracking state
+let dailyTracking = {
+  date: null,
+  focusSessionsCompleted: 0,
+  completedBreakTasks: []
+};
+
+// Load daily tracking from localStorage
+function loadDailyTracking() {
+  const stored = localStorage.getItem(STORAGE_KEY_DAILY_TRACKING);
+  const today = getTodayDateString();
+  
+  if (stored) {
+    try {
+      const data = JSON.parse(stored);
+      // If stored date is different from today, reset tracking
+      if (data.date !== today) {
+        return {
+          date: today,
+          focusSessionsCompleted: 0,
+          completedBreakTasks: []
+        };
+      }
+      return data;
+    } catch (error) {
+      console.error('Error loading daily tracking:', error);
+      return {
+        date: today,
+        focusSessionsCompleted: 0,
+        completedBreakTasks: []
+      };
+    }
+  }
+  
+  return {
+    date: today,
+    focusSessionsCompleted: 0,
+    completedBreakTasks: []
+  };
+}
+
+// Save daily tracking to localStorage
+function saveDailyTracking() {
+  dailyTracking.date = getTodayDateString();
+  localStorage.setItem(STORAGE_KEY_DAILY_TRACKING, JSON.stringify(dailyTracking));
+}
+
+// Check and reset daily tracking if it's a new day
+function checkAndResetDailyTracking() {
+  const today = getTodayDateString();
+  if (dailyTracking.date !== today) {
+    dailyTracking = {
+      date: today,
+      focusSessionsCompleted: 0,
+      completedBreakTasks: []
+    };
+    saveDailyTracking();
+  }
+}
+
+// Increment focus session count
+function incrementFocusSession() {
+  checkAndResetDailyTracking();
+  dailyTracking.focusSessionsCompleted++;
+  saveDailyTracking();
+  updateDailyTrackingDisplay();
+}
+
+// Track break task completion
+function trackBreakTaskCompletion(taskName) {
+  if (!taskName) return;
+  
+  checkAndResetDailyTracking();
+  if (!dailyTracking.completedBreakTasks.includes(taskName)) {
+    dailyTracking.completedBreakTasks.push(taskName);
+    saveDailyTracking();
+    updateDailyTrackingDisplay();
+  }
+}
+
+// Update daily tracking display
+function updateDailyTrackingDisplay() {
+  if (!dailyTrackingDisplay) return;
+  
+  checkAndResetDailyTracking();
+  const count = dailyTracking.focusSessionsCompleted;
+  dailyTrackingDisplay.textContent = `Today ${count} / ${dailyTarget}`;
 }
 
 // Render break tasks list
@@ -244,10 +360,9 @@ function handleTaskSelection(taskName) {
 
 // Handle completion confirmation - Yes
 function handleCompletionYes() {
-  // Log completion (prepare for Milestone 7)
+  // Track break task completion
   if (timerState.selectedTask) {
-    // TODO: Store completion in Milestone 7
-    console.log('Task completed:', timerState.selectedTask);
+    trackBreakTaskCompletion(timerState.selectedTask);
   }
   
   // Return to focus mode
@@ -375,6 +490,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Initialize settings inputs with current values
   focusDurationInput.value = Math.floor(durations.focus / 60);
   breakDurationInput.value = Math.floor(durations.break / 60);
+  if (dailyTargetInput) {
+    dailyTargetInput.value = dailyTarget;
+  }
   
   // Load break tasks
   breakTasks = loadBreakTasks();
@@ -383,9 +501,14 @@ window.addEventListener('DOMContentLoaded', () => {
   checkAndResetSelection();
   selectedTaskIndices = loadSelectedTasks();
   
+  // Load daily tracking and check for midnight reset
+  dailyTracking = loadDailyTracking();
+  checkAndResetDailyTracking();
+  
   renderBreakTasks();
   
   updateUI();
+  updateDailyTrackingDisplay();
 });
 
 function initializeElements() {
@@ -413,6 +536,12 @@ function initializeElements() {
   completionConfirmationText = document.getElementById('completionConfirmationText');
   completionYesBtn = document.getElementById('completionYesBtn');
   completionNoBtn = document.getElementById('completionNoBtn');
+  dailyTrackingDisplay = document.getElementById('dailyTrackingDisplay');
+  dailyTargetInput = document.getElementById('dailyTarget');
+  durationsTab = document.getElementById('durationsTab');
+  breakTasksTab = document.getElementById('breakTasksTab');
+  durationsTabContent = document.getElementById('durationsTabContent');
+  breakTasksTabContent = document.getElementById('breakTasksTabContent');
 }
 
 function setupEventListeners() {
@@ -422,6 +551,9 @@ function setupEventListeners() {
   settingsCloseBtn.addEventListener('click', toggleSettings);
   focusDurationInput.addEventListener('change', handleDurationChange);
   breakDurationInput.addEventListener('change', handleDurationChange);
+  if (dailyTargetInput) {
+    dailyTargetInput.addEventListener('change', handleDailyTargetChange);
+  }
   addTaskBtn.addEventListener('click', handleAddTask);
   newTaskInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
@@ -430,6 +562,12 @@ function setupEventListeners() {
   });
   completionYesBtn.addEventListener('click', handleCompletionYes);
   completionNoBtn.addEventListener('click', handleCompletionNo);
+  if (durationsTab) {
+    durationsTab.addEventListener('click', () => switchSettingsTab('durations'));
+  }
+  if (breakTasksTab) {
+    breakTasksTab.addEventListener('click', () => switchSettingsTab('breakTasks'));
+  }
 }
 
 function toggleSettings() {
@@ -438,11 +576,35 @@ function toggleSettings() {
     // Load current values into inputs
     focusDurationInput.value = Math.floor(durations.focus / 60);
     breakDurationInput.value = Math.floor(durations.break / 60);
+    if (dailyTargetInput) {
+      dailyTargetInput.value = dailyTarget;
+    }
     // Check for midnight reset before rendering
     checkAndResetSelection();
     selectedTaskIndices = loadSelectedTasks();
+    // Check for daily tracking reset
+    checkAndResetDailyTracking();
     // Refresh break tasks list
     renderBreakTasks();
+    // Reset to first tab when opening
+    switchSettingsTab('durations');
+  }
+}
+
+function switchSettingsTab(tabName) {
+  // Remove active class from all tabs and tab contents
+  if (durationsTab) durationsTab.classList.remove('active');
+  if (breakTasksTab) breakTasksTab.classList.remove('active');
+  if (durationsTabContent) durationsTabContent.classList.remove('active');
+  if (breakTasksTabContent) breakTasksTabContent.classList.remove('active');
+  
+  // Add active class to selected tab and content
+  if (tabName === 'durations') {
+    if (durationsTab) durationsTab.classList.add('active');
+    if (durationsTabContent) durationsTabContent.classList.add('active');
+  } else if (tabName === 'breakTasks') {
+    if (breakTasksTab) breakTasksTab.classList.add('active');
+    if (breakTasksTabContent) breakTasksTabContent.classList.add('active');
   }
 }
 
@@ -474,6 +636,21 @@ function handleDurationChange() {
     updateUI();
     updateMenuBarIcon();
   }
+}
+
+function handleDailyTargetChange() {
+  const target = parseInt(dailyTargetInput.value, 10);
+  
+  // Validate input
+  if (isNaN(target) || target < 1 || target > 50) {
+    dailyTargetInput.value = dailyTarget;
+    return;
+  }
+  
+  // Update daily target
+  dailyTarget = target;
+  saveDailyTarget(dailyTarget);
+  updateDailyTrackingDisplay();
 }
 
 function handlePlayPause() {
@@ -556,7 +733,10 @@ function completeTimer() {
   }
   
   if (timerState.mode === TimerMode.FOCUS) {
-    // Focus timer completed - show task selection screen
+    // Focus timer completed - increment focus session count
+    incrementFocusSession();
+    
+    // Show task selection screen
     timerState.state = TimerState.IDLE;
     timerState.mode = TimerMode.BREAK;
     timerState.duration = durations.break;
@@ -660,6 +840,7 @@ function updateUI() {
   }
   
   updateMenuBarIcon();
+  updateDailyTrackingDisplay();
 }
 
 function updateMenuBarIcon() {

@@ -5,6 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,5 +16,31 @@
   "devDependencies": {
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.custompomodoro.app",
+    "productName": "Custom Pomodoro",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "default",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    }
   }
 }
