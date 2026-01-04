@@ -96,6 +96,7 @@ let taskSelectionScreen, taskSelectionList, taskNameDisplay;
 let completionConfirmation, completionConfirmationText, completionYesBtn, completionNoBtn;
 let dailyTrackingDisplay, dailyTargetInput;
 let durationsTab, breakTasksTab, durationsTabContent, breakTasksTabContent;
+let noBreakTasksNotice;
 
 // Load break tasks from localStorage
 function loadBreakTasks() {
@@ -542,6 +543,7 @@ function initializeElements() {
   breakTasksTab = document.getElementById('breakTasksTab');
   durationsTabContent = document.getElementById('durationsTabContent');
   breakTasksTabContent = document.getElementById('breakTasksTabContent');
+  noBreakTasksNotice = document.getElementById('noBreakTasksNotice');
 }
 
 function setupEventListeners() {
@@ -736,6 +738,9 @@ function completeTimer() {
     // Focus timer completed - increment focus session count
     incrementFocusSession();
     
+    // Play focus end audio
+    playAudio('assets/sounds/focus_end.m4a');
+    
     // Show task selection screen
     timerState.state = TimerState.IDLE;
     timerState.mode = TimerMode.BREAK;
@@ -746,6 +751,9 @@ function completeTimer() {
     timerState.showingCompletionConfirmation = false;
   } else {
     // Break timer completed - show completion confirmation
+    // Play break end audio
+    playAudio('assets/sounds/break_end.m4a');
+    
     timerState.state = TimerState.IDLE;
     timerState.showingTaskSelection = false;
     timerState.showingCompletionConfirmation = true;
@@ -753,6 +761,19 @@ function completeTimer() {
   
   updateUI();
   updateMenuBarIcon();
+}
+
+function playAudio(audioPath) {
+  try {
+    const audio = new Audio(audioPath);
+    audio.play().catch(error => {
+      console.error('Error playing audio:', error);
+      // Audio playback failed - fail gracefully without interrupting user flow
+    });
+  } catch (error) {
+    console.error('Error creating audio:', error);
+    // Audio creation failed - fail gracefully without interrupting user flow
+  }
 }
 
 function formatTime(seconds) {
@@ -824,6 +845,22 @@ function updateUI() {
       } else {
         taskNameDisplay.textContent = '';
         taskNameDisplay.style.display = 'none';
+      }
+    }
+    
+    // Update no break tasks notice
+    if (noBreakTasksNotice) {
+      // Show notice when focus timer is idle and no break tasks are selected
+      if (timerState.mode === TimerMode.FOCUS && timerState.state === TimerState.IDLE) {
+        checkAndResetSelection();
+        selectedTaskIndices = loadSelectedTasks();
+        if (selectedTaskIndices.length === 0) {
+          noBreakTasksNotice.classList.add('visible');
+        } else {
+          noBreakTasksNotice.classList.remove('visible');
+        }
+      } else {
+        noBreakTasksNotice.classList.remove('visible');
       }
     }
     

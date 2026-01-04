@@ -680,6 +680,24 @@
     .completion-btn.no:hover {
       background: #d0d0d0;
     }
+
+    .no-break-tasks-notice {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, 30px);
+      font-size: 11px;
+      font-weight: 500;
+      color: #e74c3c;
+      text-align: center;
+      white-space: nowrap;
+      z-index: 2;
+      display: none;
+    }
+
+    .no-break-tasks-notice.visible {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -749,6 +767,7 @@
       </svg>
       <div class="time-display">25:00</div>
       <div class="task-name-display" id="taskNameDisplay"></div>
+      <div class="no-break-tasks-notice" id="noBreakTasksNotice">no break tasks selected</div>
     </div>
 
     <div class="task-selection-screen" id="taskSelectionScreen">

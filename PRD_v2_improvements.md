@@ -11,10 +11,13 @@ This document tracks improvements and enhancements for v2 of the Pomodoro timer 
 ### UI/UX Enhancements
 - the ring around the time in the popover reduces as time runs out.
 - in settings, durations and break tasks are two separate selectable sections, not stack one on top of the other. for break tasks input field stays at the top and tasks list below the input field as created.
+- in the menu bar, make the timer a bit larger.
 
 ### Feature Additions
 - if no break tasks are selected, the user should be prompted before starting the focus timer to select his days break tasks.
 - make the popover open whenever a timer runs out as a prompt to act on it. right now it just runs down and i have no way of knowing it's run out unless I check the app.
+- when you select the break task, the break timer should automatically start
+- add audio to focus timer end and break timer end
 
 ### Performance Optimizations
 - [ ] Add performance improvements here
