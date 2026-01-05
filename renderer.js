@@ -26,6 +26,7 @@ const STORAGE_KEY_SELECTED_TASKS = 'pomodoro_selected_tasks';
 const STORAGE_KEY_SELECTION_DATE = 'pomodoro_selection_date';
 const STORAGE_KEY_DAILY_TRACKING = 'pomodoro_daily_tracking';
 const STORAGE_KEY_DAILY_TARGET = 'pomodoro_daily_target';
+const STORAGE_KEY_AUDIO_MUTED = 'pomodoro_audio_muted';
 
 // Load durations from localStorage or use defaults
 function loadDurations() {
@@ -70,6 +71,18 @@ function saveDailyTarget(target) {
 // Daily target
 let dailyTarget = loadDailyTarget();
 
+// Audio mute state
+function loadAudioMuted() {
+  const stored = localStorage.getItem(STORAGE_KEY_AUDIO_MUTED);
+  return stored === 'true';
+}
+
+function saveAudioMuted(muted) {
+  localStorage.setItem(STORAGE_KEY_AUDIO_MUTED, muted.toString());
+}
+
+let audioMuted = loadAudioMuted();
+
 // Timer state
 let timerState = {
   mode: TimerMode.FOCUS,
@@ -97,6 +110,7 @@ let completionConfirmation, completionConfirmationText, completionYesBtn, comple
 let dailyTrackingDisplay, dailyTargetInput;
 let durationsTab, breakTasksTab, durationsTabContent, breakTasksTabContent;
 let noBreakTasksNotice;
+let muteBtn, muteIcon, unmuteIcon;
 
 // Load break tasks from localStorage
 function loadBreakTasks() {
@@ -351,12 +365,11 @@ function renderTaskSelection() {
 function handleTaskSelection(taskName) {
   timerState.selectedTask = taskName;
   timerState.showingTaskSelection = false;
-  timerState.state = TimerState.IDLE;
   timerState.duration = durations.break;
   timerState.remaining = timerState.duration;
   
-  updateUI();
-  updateMenuBarIcon();
+  // Auto-start break timer after task selection
+  startTimer();
 }
 
 // Handle completion confirmation - Yes
@@ -510,6 +523,7 @@ window.addEventListener('DOMContentLoaded', () => {
   
   updateUI();
   updateDailyTrackingDisplay();
+  updateMuteButton();
 });
 
 function initializeElements() {
@@ -544,6 +558,9 @@ function initializeElements() {
   durationsTabContent = document.getElementById('durationsTabContent');
   breakTasksTabContent = document.getElementById('breakTasksTabContent');
   noBreakTasksNotice = document.getElementById('noBreakTasksNotice');
+  muteBtn = document.getElementById('muteBtn');
+  muteIcon = document.getElementById('muteIcon');
+  unmuteIcon = document.getElementById('unmuteIcon');
 }
 
 function setupEventListeners() {
@@ -569,6 +586,9 @@ function setupEventListeners() {
   }
   if (breakTasksTab) {
     breakTasksTab.addEventListener('click', () => switchSettingsTab('breakTasks'));
+  }
+  if (muteBtn) {
+    muteBtn.addEventListener('click', toggleMute);
   }
 }
 
@@ -607,6 +627,26 @@ function switchSettingsTab(tabName) {
   } else if (tabName === 'breakTasks') {
     if (breakTasksTab) breakTasksTab.classList.add('active');
     if (breakTasksTabContent) breakTasksTabContent.classList.add('active');
+  }
+}
+
+function toggleMute() {
+  audioMuted = !audioMuted;
+  saveAudioMuted(audioMuted);
+  updateMuteButton();
+}
+
+function updateMuteButton() {
+  if (muteBtn && muteIcon && unmuteIcon) {
+    if (audioMuted) {
+      muteIcon.style.display = 'block';
+      unmuteIcon.style.display = 'none';
+      muteBtn.setAttribute('aria-label', 'Unmute audio');
+    } else {
+      muteIcon.style.display = 'none';
+      unmuteIcon.style.display = 'block';
+      muteBtn.setAttribute('aria-label', 'Mute audio');
+    }
   }
 }
 
@@ -759,11 +799,25 @@ function completeTimer() {
     timerState.showingCompletionConfirmation = true;
   }
   
+  // Ensure popover window is visible when timer completes
+  if (window.electronAPI && window.electronAPI.showPopover) {
+    try {
+      window.electronAPI.showPopover();
+    } catch (error) {
+      console.error('Error showing popover:', error);
+    }
+  }
+  
   updateUI();
   updateMenuBarIcon();
 }
 
 function playAudio(audioPath) {
+  // Don't play audio if muted
+  if (audioMuted) {
+    return;
+  }
+  
   try {
     const audio = new Audio(audioPath);
     audio.play().catch(error => {

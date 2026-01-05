@@ -310,6 +310,28 @@ ipcMain.on('update-tray-icon', (event, timeText) => {
   updateTrayIcon(timeText);
 });
 
+ipcMain.on('show-popover', () => {
+  if (!popoverWindow) {
+    createPopover();
+  } else {
+    // Reposition popover in case tray icon moved
+    const trayBounds = tray.getBounds();
+    const popoverWidth = 300;
+    const popoverHeight = 400;
+    const x = Math.round(trayBounds.x + (trayBounds.width / 2) - (popoverWidth / 2));
+    const y = Math.round(trayBounds.y + trayBounds.height);
+    
+    // Ensure popover doesn't go off screen
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+    const adjustedX = Math.max(10, Math.min(x, screenWidth - popoverWidth - 10));
+    const adjustedY = Math.max(10, Math.min(y, screenHeight - popoverHeight - 10));
+    
+    popoverWindow.setPosition(adjustedX, adjustedY);
+    popoverWindow.show();
+  }
+});
+
 // When Electron is ready, create the tray
 app.whenReady().then(() => {
   // Hide dock icon on macOS (menu bar only)
