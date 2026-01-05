@@ -19,3 +19,6 @@ npm-debug.log*
 .env
 .env.local
 
+# Build outputs (use GitHub Releases for distribution)
+dist/
+
