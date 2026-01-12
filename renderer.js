@@ -1,14 +1,15 @@
 // Timer Engine - Milestone 3
 // Implements focus and break timers with countdown functionality
+// Timer state is now managed in the main process
 
-// Timer state
+// Timer state constants (for UI logic only)
 const TimerState = {
   IDLE: 'idle',
   RUNNING: 'running',
   PAUSED: 'paused'
 };
 
-// Timer mode
+// Timer mode constants (for UI logic only)
 const TimerMode = {
   FOCUS: 'focus',
   BREAK: 'break'
@@ -83,16 +84,15 @@ function saveAudioMuted(muted) {
 
 let audioMuted = loadAudioMuted();
 
-// Timer state
+// Timer state (synced from main process via IPC)
 let timerState = {
   mode: TimerMode.FOCUS,
   state: TimerState.IDLE,
   duration: durations.focus,
   remaining: durations.focus,
-  intervalId: null,
-  selectedTask: null, // Currently selected break task name
-  showingTaskSelection: false, // Whether to show task selection screen
-  showingCompletionConfirmation: false // Whether to show completion confirmation
+  selectedTask: null,
+  showingTaskSelection: false,
+  showingCompletionConfirmation: false
 };
 
 // Break tasks database
@@ -363,13 +363,10 @@ function renderTaskSelection() {
 
 // Handle task selection
 function handleTaskSelection(taskName) {
-  timerState.selectedTask = taskName;
-  timerState.showingTaskSelection = false;
-  timerState.duration = durations.break;
-  timerState.remaining = timerState.duration;
-  
-  // Auto-start break timer after task selection
-  startTimer();
+  // Send task selection to main process
+  if (window.electronAPI && window.electronAPI.timerSelectTask) {
+    window.electronAPI.timerSelectTask(taskName);
+  }
 }
 
 // Handle completion confirmation - Yes
@@ -379,30 +376,18 @@ function handleCompletionYes() {
     trackBreakTaskCompletion(timerState.selectedTask);
   }
   
-  // Return to focus mode
-  timerState.mode = TimerMode.FOCUS;
-  timerState.state = TimerState.IDLE;
-  timerState.duration = durations.focus;
-  timerState.remaining = timerState.duration;
-  timerState.selectedTask = null;
-  timerState.showingCompletionConfirmation = false;
-  
-  updateUI();
-  updateMenuBarIcon();
+  // Send completion confirmation to main process
+  if (window.electronAPI && window.electronAPI.timerCompletionYes) {
+    window.electronAPI.timerCompletionYes();
+  }
 }
 
 // Handle completion confirmation - No
 function handleCompletionNo() {
-  // Don't log completion, just return to focus mode
-  timerState.mode = TimerMode.FOCUS;
-  timerState.state = TimerState.IDLE;
-  timerState.duration = durations.focus;
-  timerState.remaining = timerState.duration;
-  timerState.selectedTask = null;
-  timerState.showingCompletionConfirmation = false;
-  
-  updateUI();
-  updateMenuBarIcon();
+  // Send completion confirmation to main process
+  if (window.electronAPI && window.electronAPI.timerCompletionNo) {
+    window.electronAPI.timerCompletionNo();
+  }
 }
 
 // Handle adding a new task
@@ -501,6 +486,11 @@ window.addEventListener('DOMContentLoaded', () => {
   timerState.duration = durations.focus;
   timerState.remaining = durations.focus;
   
+  // Sync durations to main process
+  if (window.electronAPI && window.electronAPI.timerSyncDurations) {
+    window.electronAPI.timerSyncDurations(durations.focus, durations.break);
+  }
+  
   // Initialize settings inputs with current values
   focusDurationInput.value = Math.floor(durations.focus / 60);
   breakDurationInput.value = Math.floor(durations.break / 60);
@@ -520,6 +510,43 @@ window.addEventListener('DOMContentLoaded', () => {
   checkAndResetDailyTracking();
   
   renderBreakTasks();
+  
+  // Set up IPC listeners for timer updates
+  if (window.electronAPI) {
+    // Listen for timer state updates from main process
+    if (window.electronAPI.onTimerUpdate) {
+      window.electronAPI.onTimerUpdate((state) => {
+        timerState.mode = state.mode;
+        timerState.state = state.state;
+        timerState.duration = state.duration;
+        timerState.remaining = state.remaining;
+        timerState.selectedTask = state.selectedTask;
+        timerState.showingTaskSelection = state.showingTaskSelection;
+        timerState.showingCompletionConfirmation = state.showingCompletionConfirmation;
+        updateUI();
+      });
+    }
+    
+    // Listen for focus timer completion
+    if (window.electronAPI.onTimerFocusComplete) {
+      window.electronAPI.onTimerFocusComplete(() => {
+        incrementFocusSession();
+        playAudio('assets/sounds/focus_end.m4a');
+      });
+    }
+    
+    // Listen for break timer completion
+    if (window.electronAPI.onTimerBreakComplete) {
+      window.electronAPI.onTimerBreakComplete(() => {
+        playAudio('assets/sounds/break_end.m4a');
+      });
+    }
+  }
+  
+  // Request current timer state from main process
+  if (window.electronAPI && window.electronAPI.timerGetState) {
+    window.electronAPI.timerGetState();
+  }
   
   updateUI();
   updateDailyTrackingDisplay();
@@ -671,12 +698,14 @@ function handleDurationChange() {
   // Save to localStorage
   saveDurations(focusMinutes, breakMinutes);
   
-  // Update timer if it's idle
+  // Sync durations to main process
+  if (window.electronAPI && window.electronAPI.timerSyncDurations) {
+    window.electronAPI.timerSyncDurations(durations.focus, durations.break);
+  }
+  
+  // Update timer if it's idle (will be synced from main process)
   if (timerState.state === TimerState.IDLE) {
-    timerState.duration = timerState.mode === TimerMode.FOCUS ? durations.focus : durations.break;
-    timerState.remaining = timerState.duration;
     updateUI();
-    updateMenuBarIcon();
   }
 }
 
@@ -697,119 +726,23 @@ function handleDailyTargetChange() {
 
 function handlePlayPause() {
   if (timerState.state === TimerState.IDLE || timerState.state === TimerState.PAUSED) {
-    startTimer();
+    // Start timer via IPC
+    if (window.electronAPI && window.electronAPI.timerStart) {
+      window.electronAPI.timerStart();
+    }
   } else if (timerState.state === TimerState.RUNNING) {
-    pauseTimer();
+    // Pause timer via IPC
+    if (window.electronAPI && window.electronAPI.timerPause) {
+      window.electronAPI.timerPause();
+    }
   }
 }
 
 function handleReset() {
-  resetTimer();
-}
-
-function startTimer() {
-  if (timerState.state === TimerState.IDLE) {
-    // Starting fresh - set duration based on mode (use custom durations)
-    timerState.duration = timerState.mode === TimerMode.FOCUS 
-      ? durations.focus 
-      : durations.break;
-    timerState.remaining = timerState.duration;
+  // Reset timer via IPC
+  if (window.electronAPI && window.electronAPI.timerReset) {
+    window.electronAPI.timerReset();
   }
-  
-  timerState.state = TimerState.RUNNING;
-  
-  // Update interval every second
-  timerState.intervalId = setInterval(() => {
-    timerState.remaining--;
-    
-    if (timerState.remaining <= 0) {
-      timerState.remaining = 0;
-      completeTimer();
-    }
-    
-    updateUI();
-    updateMenuBarIcon();
-  }, 1000);
-  
-  updateUI();
-}
-
-function pauseTimer() {
-  if (timerState.intervalId) {
-    clearInterval(timerState.intervalId);
-    timerState.intervalId = null;
-  }
-  
-  timerState.state = TimerState.PAUSED;
-  updateUI();
-}
-
-function resetTimer() {
-  if (timerState.intervalId) {
-    clearInterval(timerState.intervalId);
-    timerState.intervalId = null;
-  }
-  
-  // Reset to custom duration for current mode
-  timerState.duration = timerState.mode === TimerMode.FOCUS 
-    ? durations.focus 
-    : durations.break;
-  timerState.remaining = timerState.duration;
-  timerState.state = TimerState.IDLE;
-  timerState.showingTaskSelection = false;
-  timerState.showingCompletionConfirmation = false;
-  
-  // Clear selected task if resetting during break
-  if (timerState.mode === TimerMode.BREAK) {
-    timerState.selectedTask = null;
-  }
-  
-  updateUI();
-  updateMenuBarIcon();
-}
-
-function completeTimer() {
-  if (timerState.intervalId) {
-    clearInterval(timerState.intervalId);
-    timerState.intervalId = null;
-  }
-  
-  if (timerState.mode === TimerMode.FOCUS) {
-    // Focus timer completed - increment focus session count
-    incrementFocusSession();
-    
-    // Play focus end audio
-    playAudio('assets/sounds/focus_end.m4a');
-    
-    // Show task selection screen
-    timerState.state = TimerState.IDLE;
-    timerState.mode = TimerMode.BREAK;
-    timerState.duration = durations.break;
-    timerState.remaining = timerState.duration;
-    timerState.selectedTask = null;
-    timerState.showingTaskSelection = true;
-    timerState.showingCompletionConfirmation = false;
-  } else {
-    // Break timer completed - show completion confirmation
-    // Play break end audio
-    playAudio('assets/sounds/break_end.m4a');
-    
-    timerState.state = TimerState.IDLE;
-    timerState.showingTaskSelection = false;
-    timerState.showingCompletionConfirmation = true;
-  }
-  
-  // Ensure popover window is visible when timer completes
-  if (window.electronAPI && window.electronAPI.showPopover) {
-    try {
-      window.electronAPI.showPopover();
-    } catch (error) {
-      console.error('Error showing popover:', error);
-    }
-  }
-  
-  updateUI();
-  updateMenuBarIcon();
 }
 
 function playAudio(audioPath) {
@@ -930,20 +863,12 @@ function updateUI() {
     }
   }
   
-  updateMenuBarIcon();
   updateDailyTrackingDisplay();
 }
 
 function updateMenuBarIcon() {
-  // Send message to main process to update menu bar icon
-  // Use a small delay to ensure preload script is loaded
-  if (window.electronAPI && window.electronAPI.updateTrayIcon) {
-    try {
-      window.electronAPI.updateTrayIcon(formatTime(timerState.remaining));
-    } catch (error) {
-      console.error('Error updating tray icon:', error);
-    }
-  }
+  // Tray icon is now updated automatically by main process
+  // This function is kept for compatibility but does nothing
 }
 
 // Expose timer state for debugging (optional)

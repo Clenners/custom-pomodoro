@@ -1,8 +1,67 @@
 const { app, BrowserWindow, Tray, nativeImage, screen, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let tray = null;
 let popoverWindow = null;
+
+// Timer state constants
+const TimerState = {
+  IDLE: 'idle',
+  RUNNING: 'running',
+  PAUSED: 'paused'
+};
+
+const TimerMode = {
+  FOCUS: 'focus',
+  BREAK: 'break'
+};
+
+// Default durations (in seconds)
+const DEFAULT_FOCUS_DURATION = 25 * 60; // 25 minutes
+const DEFAULT_BREAK_DURATION = 5 * 60;  // 5 minutes
+
+// Timer state in main process
+let timerState = {
+  mode: TimerMode.FOCUS,
+  state: TimerState.IDLE,
+  duration: DEFAULT_FOCUS_DURATION,
+  remaining: DEFAULT_FOCUS_DURATION,
+  intervalId: null,
+  selectedTask: null,
+  showingTaskSelection: false,
+  showingCompletionConfirmation: false
+};
+
+// Durations (will be synced from renderer)
+let durations = {
+  focus: DEFAULT_FOCUS_DURATION,
+  break: DEFAULT_BREAK_DURATION
+};
+
+// Helper function to format time
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+// Helper function to emit timer update to renderer
+function emitTimerUpdate() {
+  if (popoverWindow && !popoverWindow.isDestroyed()) {
+    popoverWindow.webContents.send('timer-update', {
+      mode: timerState.mode,
+      state: timerState.state,
+      duration: timerState.duration,
+      remaining: timerState.remaining,
+      selectedTask: timerState.selectedTask,
+      showingTaskSelection: timerState.showingTaskSelection,
+      showingCompletionConfirmation: timerState.showingCompletionConfirmation
+    });
+  }
+  // Always update tray icon
+  updateTrayIcon(formatTime(timerState.remaining));
+}
 
 // Simple 5x9 pixel font for rendering numbers (very basic)
 const digitPatterns = {
@@ -262,6 +321,15 @@ function createPopover() {
   popoverWindow.once('ready-to-show', () => {
     if (popoverWindow) {
       popoverWindow.show();
+      // Send current timer state when window is shown
+      emitTimerUpdate();
+    }
+  });
+  
+  // Send timer state when window becomes visible
+  popoverWindow.on('show', () => {
+    if (popoverWindow && !popoverWindow.isDestroyed()) {
+      emitTimerUpdate();
     }
   });
 
@@ -301,8 +369,144 @@ function togglePopover() {
       
       popoverWindow.setPosition(adjustedX, adjustedY);
       popoverWindow.show();
+      // Send current timer state when popover is shown
+      emitTimerUpdate();
     }
   }
+}
+
+// Timer control functions
+function startTimer() {
+  if (timerState.state === TimerState.IDLE) {
+    // Starting fresh - set duration based on mode
+    timerState.duration = timerState.mode === TimerMode.FOCUS 
+      ? durations.focus 
+      : durations.break;
+    timerState.remaining = timerState.duration;
+  }
+  
+  timerState.state = TimerState.RUNNING;
+  
+  // Clear any existing interval
+  if (timerState.intervalId) {
+    clearInterval(timerState.intervalId);
+  }
+  
+  // Update interval every second
+  timerState.intervalId = setInterval(() => {
+    timerState.remaining--;
+    
+    if (timerState.remaining <= 0) {
+      timerState.remaining = 0;
+      completeTimer();
+    } else {
+      emitTimerUpdate();
+    }
+  }, 1000);
+  
+  emitTimerUpdate();
+}
+
+function pauseTimer() {
+  if (timerState.intervalId) {
+    clearInterval(timerState.intervalId);
+    timerState.intervalId = null;
+  }
+  
+  timerState.state = TimerState.PAUSED;
+  emitTimerUpdate();
+}
+
+function resetTimer() {
+  if (timerState.intervalId) {
+    clearInterval(timerState.intervalId);
+    timerState.intervalId = null;
+  }
+  
+  // Reset to custom duration for current mode
+  timerState.duration = timerState.mode === TimerMode.FOCUS 
+    ? durations.focus 
+    : durations.break;
+  timerState.remaining = timerState.duration;
+  timerState.state = TimerState.IDLE;
+  timerState.showingTaskSelection = false;
+  timerState.showingCompletionConfirmation = false;
+  
+  // Clear selected task if resetting during break
+  if (timerState.mode === TimerMode.BREAK) {
+    timerState.selectedTask = null;
+  }
+  
+  emitTimerUpdate();
+}
+
+function completeTimer() {
+  if (timerState.intervalId) {
+    clearInterval(timerState.intervalId);
+    timerState.intervalId = null;
+  }
+  
+  if (timerState.mode === TimerMode.FOCUS) {
+    // Focus timer completed - show task selection screen
+    timerState.state = TimerState.IDLE;
+    timerState.mode = TimerMode.BREAK;
+    timerState.duration = durations.break;
+    timerState.remaining = timerState.duration;
+    timerState.selectedTask = null;
+    timerState.showingTaskSelection = true;
+    timerState.showingCompletionConfirmation = false;
+    
+    // Request focus session increment from renderer
+    if (popoverWindow && !popoverWindow.isDestroyed()) {
+      popoverWindow.webContents.send('timer-focus-complete');
+    }
+    
+    // Show popover when timer completes
+    if (popoverWindow && !popoverWindow.isDestroyed()) {
+      const trayBounds = tray.getBounds();
+      const popoverWidth = 300;
+      const popoverHeight = 400;
+      const x = Math.round(trayBounds.x + (trayBounds.width / 2) - (popoverWidth / 2));
+      const y = Math.round(trayBounds.y + trayBounds.height);
+      
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+      const adjustedX = Math.max(10, Math.min(x, screenWidth - popoverWidth - 10));
+      const adjustedY = Math.max(10, Math.min(y, screenHeight - popoverHeight - 10));
+      
+      popoverWindow.setPosition(adjustedX, adjustedY);
+      popoverWindow.show();
+    }
+  } else {
+    // Break timer completed - show completion confirmation
+    timerState.state = TimerState.IDLE;
+    timerState.showingTaskSelection = false;
+    timerState.showingCompletionConfirmation = true;
+    
+    // Request break end audio from renderer
+    if (popoverWindow && !popoverWindow.isDestroyed()) {
+      popoverWindow.webContents.send('timer-break-complete');
+    }
+    
+    // Show popover when timer completes
+    if (popoverWindow && !popoverWindow.isDestroyed()) {
+      const trayBounds = tray.getBounds();
+      const popoverWidth = 300;
+      const popoverHeight = 400;
+      const x = Math.round(trayBounds.x + (trayBounds.width / 2) - (popoverWidth / 2));
+      const y = Math.round(trayBounds.y + trayBounds.height);
+      
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+      const adjustedX = Math.max(10, Math.min(x, screenWidth - popoverWidth - 10));
+      const adjustedY = Math.max(10, Math.min(y, screenHeight - popoverHeight - 10));
+      
+      popoverWindow.setPosition(adjustedX, adjustedY);
+      popoverWindow.show();
+    }
+  }
+  
+  emitTimerUpdate();
 }
 
 // Set up IPC handlers
@@ -329,6 +533,72 @@ ipcMain.on('show-popover', () => {
     
     popoverWindow.setPosition(adjustedX, adjustedY);
     popoverWindow.show();
+    // Send current timer state when popover is shown
+    emitTimerUpdate();
+  }
+});
+
+// Timer control IPC handlers
+ipcMain.on('timer-start', () => {
+  startTimer();
+});
+
+ipcMain.on('timer-pause', () => {
+  pauseTimer();
+});
+
+ipcMain.on('timer-reset', () => {
+  resetTimer();
+});
+
+ipcMain.on('timer-get-state', (event) => {
+  emitTimerUpdate();
+});
+
+ipcMain.on('timer-select-task', (event, taskName) => {
+  timerState.selectedTask = taskName;
+  timerState.showingTaskSelection = false;
+  timerState.duration = durations.break;
+  timerState.remaining = timerState.duration;
+  
+  // Auto-start break timer after task selection
+  startTimer();
+});
+
+ipcMain.on('timer-completion-yes', () => {
+  // Return to focus mode
+  timerState.mode = TimerMode.FOCUS;
+  timerState.state = TimerState.IDLE;
+  timerState.duration = durations.focus;
+  timerState.remaining = timerState.duration;
+  timerState.selectedTask = null;
+  timerState.showingCompletionConfirmation = false;
+  
+  emitTimerUpdate();
+});
+
+ipcMain.on('timer-completion-no', () => {
+  // Don't log completion, just return to focus mode
+  timerState.mode = TimerMode.FOCUS;
+  timerState.state = TimerState.IDLE;
+  timerState.duration = durations.focus;
+  timerState.remaining = timerState.duration;
+  timerState.selectedTask = null;
+  timerState.showingCompletionConfirmation = false;
+  
+  emitTimerUpdate();
+});
+
+// Sync durations from renderer
+ipcMain.on('timer-sync-durations', (event, focusSeconds, breakSeconds) => {
+  durations.focus = focusSeconds;
+  durations.break = breakSeconds;
+  
+  // Update timer if it's idle
+  if (timerState.state === TimerState.IDLE) {
+    timerState.duration = timerState.mode === TimerMode.FOCUS ? durations.focus : durations.break;
+    timerState.remaining = timerState.duration;
+    emitTimerUpdate();
   }
 });
 
@@ -366,6 +636,12 @@ app.on('window-all-closed', () => {
 
 // Quit when app is explicitly quit
 app.on('before-quit', () => {
+  // Clean up timer interval
+  if (timerState.intervalId) {
+    clearInterval(timerState.intervalId);
+    timerState.intervalId = null;
+  }
+  
   if (popoverWindow) {
     popoverWindow.removeAllListeners('close');
     popoverWindow.close();
