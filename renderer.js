@@ -280,7 +280,7 @@ function renderBreakTasks() {
     checkbox.type = 'checkbox';
     checkbox.className = 'break-task-checkbox';
     checkbox.checked = selectedTaskIndices.includes(index);
-    checkbox.addEventListener('change', () => handleTaskSelection(index, checkbox.checked));
+    checkbox.addEventListener('change', () => handleBreakTaskCheckbox(index, checkbox.checked));
     
     const text = document.createElement('span');
     text.className = 'break-task-text';
@@ -313,7 +313,7 @@ function renderBreakTasks() {
 }
 
 // Handle task selection checkbox
-function handleTaskSelection(index, isSelected) {
+function handleBreakTaskCheckbox(index, isSelected) {
   if (isSelected) {
     if (!selectedTaskIndices.includes(index)) {
       selectedTaskIndices.push(index);
